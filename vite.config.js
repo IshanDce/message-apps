@@ -10,5 +10,5 @@ export default defineConfig({
   server: {
     port: 5002,
   },
-  base: '/message-app/',
+  base: '/message-apps/',
 })

@@ -556,31 +556,54 @@ function App() {
   }, [notification]);
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-      if (currentUser) {
-        setUser(currentUser); 
+        // Add a timeout fallback so the app doesn't stay stuck on loading
+        let authInitTimeout = setTimeout(() => {
+            // If still in loading state after 10s, surface a helpful message and show login
+            setNotification('Auth initialization timed out — please check Firebase Authorized Domains and console for errors.');
+            setView('login');
+        }, 10000);
 
-        if (currentUser.email === ADMIN_EMAIL) {
-          setUserData({ nickname: "Admin", email: ADMIN_EMAIL, photoURL: "https://placehold.co/100x100/2D3748/FFFFFF?text=A" }); 
-          setView('admin_dashboard');
-        } else {
-          setView('loading_user');
-          const userDocRef = doc(db, "users", currentUser.uid);
-          const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
-              if(docSnap.exists()){ 
-                setUserData(docSnap.data()); 
-                setView('user_app');
-              }
-          });
-          return () => unsubDoc();
+        try {
+            const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+                if (currentUser) {
+                    setUser(currentUser);
+
+                    if (currentUser.email === ADMIN_EMAIL) {
+                        setUserData({ nickname: "Admin", email: ADMIN_EMAIL, photoURL: "https://placehold.co/100x100/2D3748/FFFFFF?text=A" });
+                        setView('admin_dashboard');
+                        clearTimeout(authInitTimeout);
+                    } else {
+                        setView('loading_user');
+                        const userDocRef = doc(db, "users", currentUser.uid);
+                        const unsubDoc = onSnapshot(userDocRef, (docSnap) => {
+                                if(docSnap.exists()){
+                                    setUserData(docSnap.data());
+                                    setView('user_app');
+                                    clearTimeout(authInitTimeout);
+                                }
+                        });
+                        // cleanup for the user doc listener
+                        return () => {
+                            unsubDoc();
+                        };
+                    }
+                } else {
+                    setUser(null);
+                    setUserData(null);
+                    setView('login');
+                    clearTimeout(authInitTimeout);
+                }
+            });
+            return () => {
+                unsubscribe();
+                clearTimeout(authInitTimeout);
+            };
+        } catch (err) {
+            console.error('Auth initialization error:', err);
+            setNotification('Auth initialization error: ' + (err?.message || err));
+            setView('login');
+            clearTimeout(authInitTimeout);
         }
-      } else {
-        setUser(null); 
-        setUserData(null); 
-        setView('login');
-      }
-    });
-    return () => unsubscribe();
   }, []);
 
   const handleLogout = async () => {
